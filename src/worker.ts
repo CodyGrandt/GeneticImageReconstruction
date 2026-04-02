@@ -78,7 +78,23 @@ self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
   const msg = e.data;
   switch (msg.type) {
     case 'INIT':
+      isRunning = false;
+      if (loopTimeout !== null) {
+        clearTimeout(loopTimeout);
+        loopTimeout = null;
+      }
       targetPixels = msg.targetPixels;
+      bestScore = Infinity;
+      generation = 0;
+      currentPainting = Array.from({ length: 50 }, () => ({
+        x: Math.random() * 400,
+        y: Math.random() * 400,
+        radius: Math.random() * 40 + 10,
+        red: Math.floor(Math.random() * 256),
+        green: Math.floor(Math.random() * 256),
+        blue: Math.floor(Math.random() * 256),
+        alpha: Math.random() * 0.5 + 0.1,
+      }));
       break;
     case 'START':
       if (!isRunning) {

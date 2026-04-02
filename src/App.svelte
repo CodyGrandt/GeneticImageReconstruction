@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Gene, WorkerInMessage, WorkerOutMessage } from './types';
+  import type { Gene, ShapeType, WorkerInMessage, WorkerOutMessage } from './types';
 
   let canvas: HTMLCanvasElement;
   let ctx: CanvasRenderingContext2D | null = null;
@@ -8,22 +8,39 @@
   let isRunning = false;
   let bestScore = Infinity;
   let iterationsPerFrame = 100;
+  let numShapes = 50;
+  let shapeType: ShapeType = 'circle';
   let shapesToDraw: Gene[] = [];
   let imagePreviewUrl: string | null = null;
 
   let worker: Worker;
+
+  function drawShape(gene: Gene) {
+    if (!ctx) return;
+    ctx.fillStyle = `rgba(${gene.red}, ${gene.green}, ${gene.blue}, ${gene.alpha})`;
+    const { x, y, radius: r } = gene;
+    if (shapeType === 'circle') {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (shapeType === 'rect') {
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(x,           y - r);
+      ctx.lineTo(x + r * 0.866, y + r * 0.5);
+      ctx.lineTo(x - r * 0.866, y + r * 0.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
 
   function draw() {
     if (!ctx) return;
     ctx.clearRect(0, 0, 400, 400);
     ctx.fillStyle = '#f0f0f0';
     ctx.fillRect(0, 0, 400, 400);
-    for (const gene of shapesToDraw) {
-      ctx.beginPath();
-      ctx.arc(gene.x, gene.y, gene.radius, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${gene.red}, ${gene.green}, ${gene.blue}, ${gene.alpha})`;
-      ctx.fill();
-    }
+    for (const gene of shapesToDraw) drawShape(gene);
   }
 
   function toggle() {
@@ -33,6 +50,15 @@
 
   function onIterationsChange() {
     worker.postMessage({ type: 'SET_ITERATIONS', count: iterationsPerFrame } as WorkerInMessage);
+  }
+
+  function onNumShapesChange() {
+    worker.postMessage({ type: 'SET_NUM_SHAPES', count: numShapes } as WorkerInMessage);
+  }
+
+  function onShapeTypeChange() {
+    worker.postMessage({ type: 'SET_SHAPE_TYPE', shapeType } as WorkerInMessage);
+    draw();
   }
 
   function onFileChange(e: Event) {
@@ -86,13 +112,36 @@
 <main style="text-align: center; font-family: sans-serif; padding: 20px;">
   <h2>Genetic Image Reconstruction</h2>
 
-  <div style="margin-bottom: 16px;">
-    <label style="font-size: 14px; cursor: pointer;">
+  <!-- Controls row -->
+  <div style="display: inline-flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; justify-content: center; margin-bottom: 20px;">
+
+    <label style="font-size: 14px;">
       <strong>Upload target image:</strong><br>
       <input type="file" accept="image/*" on:change={onFileChange} style="margin-top: 6px;" />
     </label>
+
+    <label style="font-size: 14px;">
+      <strong>Shape type:</strong><br>
+      <select bind:value={shapeType} on:change={onShapeTypeChange} style="margin-top: 6px; font-size: 14px; padding: 4px 8px;">
+        <option value="circle">Circle</option>
+        <option value="rect">Rectangle</option>
+        <option value="triangle">Triangle</option>
+      </select>
+    </label>
+
+    <label style="font-size: 14px;">
+      <strong>Shapes: {numShapes}</strong><br>
+      <input type="range" min="5" max="200" step="5" bind:value={numShapes} on:input={onNumShapesChange} style="width: 160px; margin-top: 6px;" />
+    </label>
+
+    <label style="font-size: 14px;">
+      <strong>Iterations/batch: {iterationsPerFrame}</strong><br>
+      <input type="range" min="1" max="1000" step="1" bind:value={iterationsPerFrame} on:input={onIterationsChange} style="width: 160px; margin-top: 6px;" />
+    </label>
+
   </div>
 
+  <!-- Canvases -->
   <div style="display: inline-flex; gap: 24px; align-items: flex-start;">
     {#if imagePreviewUrl}
       <div>
@@ -125,12 +174,6 @@
     <strong>Score (RMSE):</strong> {bestScore === Infinity ? '—' : bestScore.toFixed(2)}
   </p>
 
-  <label style="font-size: 14px;">
-    <strong>Iterations/batch:</strong> {iterationsPerFrame}
-    <br>
-    <input type="range" min="1" max="1000" step="1" bind:value={iterationsPerFrame} on:input={onIterationsChange} style="width: 200px;" />
-  </label>
-  <br><br>
   <button
     on:click={toggle}
     disabled={!imagePreviewUrl}
